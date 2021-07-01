@@ -793,12 +793,63 @@ let rec stmt_aux env st =
       let stmt2 = stmt env stmt2 in
       stmt1 @ stmt2
   | G.DisjStmt _ -> sgrep_construct (G.S st)
+  | G.OtherStmtWithStmt (G.OSWS_With, Some mk_mgr_as_pat, body) ->
+      let mk_mgr, opt_pat =
+        match mk_mgr_as_pat with
+        | G.LetPattern (pat, mk_mgr) -> (mk_mgr, Some pat)
+        | mk_mgr -> (mk_mgr, None)
+      in
+      python_with_stmt env mk_mgr opt_pat body
   | G.OtherStmt _ | G.OtherStmtWithStmt _ -> todo (G.S st)
 
 (*s: function [[AST_to_IL.stmt]] *)
 and stmt env st =
   try stmt_aux env st
   with Fixme (kind, any_generic) -> fixme_stmt kind any_generic
+
+(*
+ *     with MK_MGR as PAT:
+ *         BODY
+ *
+ * See https://www.python.org/dev/peps/pep-0343/ *)
+and python_with_stmt env mk_mgr opt_pat body =
+  (* mgr = MK_MGR *)
+  let mgr_var = fresh_var env G.sc in
+  let mgr = lval_of_base (Var mgr_var) in
+  let ss1, mk_mgr' = expr_with_pre_stmts env mk_mgr in
+  let ss_def_mgr =
+    ss1 @ [ mk_s (Instr (mk_i (Assign (mgr, mk_mgr')) mk_mgr)) ]
+  in
+  (* type(mgr) *)
+  let mgr_class = fresh_lval env G.sc in
+  let ss_mgr_class =
+    [
+      mk_s
+        (Instr
+           (mk_i
+              (CallSpecial
+                 (Some mgr_class, (Typeof, G.sc), [ mk_e (Fetch mgr) mk_mgr ]))
+              mk_mgr));
+    ]
+  in
+  (* exit = mgr_class.__exit__ *)
+  let exit = fresh_lval env G.sc in
+  let mgr_exit =
+    (* type(mgr).__exit___ *)
+    {
+      base = Var mgr_var;
+      offset = Dot (("__exit__", G.sc), -1);
+      constness = ref None;
+    }
+  in
+  let ss_def_exit =
+    [ mk_s (Instr (mk_i (Assign (exit, mk_e (Fetch mgr_exit) mk_mgr)) mk_mgr)) ]
+  in
+  (* let assign =
+       pattern_assign_statements env (mk_e (Fetch next_lval) e) e pat
+     in *)
+  ignore (ss_def_mgr, ss_mgr_class, ss_def_exit, opt_pat, body);
+  assert false
 
 (*e: function [[AST_to_IL.stmt]] *)
 
