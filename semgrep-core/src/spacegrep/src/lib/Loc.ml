@@ -54,3 +54,5 @@ let sub (a, b) pos len =
 let dummy = (Pos.dummy, Pos.dummy)
 
 let show (start, end_) = sprintf "(%s, %s)" (Pos.show start) (Pos.show end_)
+
+let range (start, _) (_, end_) = (start, end_)

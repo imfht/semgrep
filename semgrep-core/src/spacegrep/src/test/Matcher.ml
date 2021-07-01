@@ -11,7 +11,7 @@ let punct c = Pattern_AST.(Atom (Loc.dummy, Punct c))
 
 let byte c = Pattern_AST.(Atom (Loc.dummy, Byte c))
 
-let dots = Pattern_AST.(Dots (Loc.dummy, None))
+let dots = Pattern_AST.(Dots { loc = Loc.dummy; name = None; repeats = 1 })
 
 let metavar s = Pattern_AST.(Atom (Loc.dummy, Metavar s))
 

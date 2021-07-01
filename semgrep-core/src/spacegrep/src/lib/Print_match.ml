@@ -7,6 +7,8 @@ open Printf
 open Pattern_AST
 open Doc_AST
 
+let show_repeats = function 1 -> "" | n -> sprintf " *%i" n
+
 let show_pat_node (pat_node : Pattern_AST.node) =
   match pat_node with
   | Atom (_loc, Word s) -> sprintf "Word '%s'" (String.escaped s)
@@ -14,8 +16,9 @@ let show_pat_node (pat_node : Pattern_AST.node) =
   | Atom (_loc, Byte c) -> sprintf "Byte 0x%02x" (Char.code c)
   | Atom (_loc, Metavar s) -> sprintf "Metavar %s" s
   | List _ -> "List"
-  | Dots (_loc, None) -> "Dots"
-  | Dots (_loc, Some s) -> sprintf "Dots %s" s
+  | Dots { loc = _; name = None; repeats } -> "Dots" ^ show_repeats repeats
+  | Dots { loc = _; name = Some s; repeats } ->
+      sprintf "Dots %s%s" s (show_repeats repeats)
   | End -> "End"
 
 let show_doc_node (doc_node : Doc_AST.node) =

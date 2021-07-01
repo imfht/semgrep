@@ -9,10 +9,17 @@ type atom =
   | Metavar of string
 [@@deriving show { with_path = false }, eq]
 
+type dots = {
+  loc : Loc.t;
+  name : string option;
+  repeats : int; (* number of '...' that were collapsed into one. *)
+}
+[@@deriving show { with_path = false }, eq]
+
 type node =
   | Atom of Loc.t * atom
   | List of node list
-  | Dots of Loc.t * string option (* both ... and $...MVAR *)
+  | Dots of dots (* both ... and $...MVAR *)
   | End (* used to mark the end of the root pattern, so as to distinguish
            it from the end of a sub-pattern. *)
 [@@deriving show { with_path = false }, eq]
@@ -41,7 +48,7 @@ let rec as_doc (pat : t) : t =
           Atom (Loc.sub loc 0 1, Punct '$')
           :: Atom (word_loc, Word s)
           :: as_doc pat )
-  | Dots (loc, None) :: pat ->
+  | Dots { loc; name = None; _ } :: pat ->
       let pos0, pos3 = loc in
       let pos1 = Loc.Pos.shift pos0 1 in
       let pos2 = Loc.Pos.shift pos1 1 in
@@ -52,7 +59,7 @@ let rec as_doc (pat : t) : t =
       :: Atom (loc1, Punct '.')
       :: Atom (loc2, Punct '.')
       :: as_doc pat
-  | Dots (loc, Some s) :: pat ->
+  | Dots { loc; name = Some s; _ } :: pat ->
       let pos0, pos5 = loc in
       let pos1 = Loc.Pos.shift pos0 1 in
       let pos2 = Loc.Pos.shift pos1 1 in
@@ -79,9 +86,10 @@ let rec eq a b =
       ( match (a_head, b_head) with
       | Atom (_, a), Atom (_, b) -> a = b
       | List a, List b -> eq a b
-      | Dots (_, None), Dots (_, None) -> true
-      | Dots (_, Some mva), Dots (_, Some mvb) -> mva = mvb
-      | Dots (_, None), Dots (_, Some _) | Dots (_, Some _), Dots (_, None) ->
+      | Dots { name = None; _ }, Dots { name = None; _ } -> true
+      | Dots { name = Some mva; _ }, Dots { name = Some mvb; _ } -> mva = mvb
+      | Dots { name = None; _ }, Dots { name = Some _; _ }
+      | Dots { name = Some _; _ }, Dots { name = None; _ } ->
           false
       | End, End -> true
       | _ -> false )

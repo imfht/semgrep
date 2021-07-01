@@ -37,7 +37,9 @@ let partial_input max_len ic =
   let len = read 0 max_len in
   Bytes.sub_string buf 0 len
 
-let get_channel_length ic = try Some (in_channel_length ic) with _ -> None
+let get_channel_length ic =
+  try Some (in_channel_length ic)
+  with Sys_error _ (* "Illegal seek" *) -> None
 
 let input_all_from_nonseekable_channel ic =
   let buf = Buffer.create 10000 in

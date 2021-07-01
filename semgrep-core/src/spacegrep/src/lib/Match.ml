@@ -108,28 +108,35 @@ let case_insensitive_equal a b =
     true
   with Exit -> false
 
+(* How many lines an ellipsis can match *)
+let ellipsis_max_span = 10
+
+let get_max_line_num ~(dots_param : Pattern_AST.dots) (last_loc : Loc.t) =
+  let _, last_pos = last_loc in
+  last_pos.pos_lnum + (dots_param.repeats * ellipsis_max_span)
+
+let extend_max_line_num ~(dots_param : Pattern_AST.dots) dots =
+  dots.max_line_num + (dots_param.repeats * ellipsis_max_span)
+
 (*
    Create or update the 'dots' object which indicates:
    1. that we're allowing to skip document nodes that don't match;
    2. and until which line we allow this skipping.
 *)
-let extend_dots ~dots:opt_dots opt_mvar (last_loc : Loc.t) =
-  let ellipsis_max_span = 10 (* lines *) in
+let extend_dots ~dots:opt_dots ~dots_param (last_loc : Loc.t) : dots option =
+  let opt_mvar = dots_param.name in
   match (opt_dots, opt_mvar) with
   | None, _ ->
-      (* Allow `...` to extend for at most 10 lines. *)
+      (* Allow a single '...' to extend for at most 10 lines. *)
       let _, last_pos = last_loc in
-      Some
-        {
-          max_line_num = last_pos.pos_lnum + ellipsis_max_span;
-          matched = (last_pos, last_pos);
-          opt_mvar;
-        }
+      let max_line_num = get_max_line_num ~dots_param last_loc in
+      Some { max_line_num; matched = (last_pos, last_pos); opt_mvar }
   | Some dots, None ->
-      (* Extra `...`s let us skip more lines. *)
-      Some { dots with max_line_num = dots.max_line_num + ellipsis_max_span }
+      (* Extra '...'s let us skip more lines. *)
+      let max_line_num = extend_max_line_num ~dots_param dots in
+      Some { dots with max_line_num }
   | Some _, Some _ ->
-      (* `... $...X` and `$...Y $...X` are rejected by Parse_pattern. *)
+      (* '... $...X' and '$...Y $...X' are rejected by Parse_pattern. *)
       assert false
 
 let extend_dots_matched ~dots:opt_dots (end_ : Loc.Pos.t) =
@@ -150,7 +157,8 @@ let close_dots conf ~dots:opt_dots env =
       match Env.find_opt name env with
       | None -> Some (Env.add name (matched, value) env)
       | Some (_loc0, value0) ->
-          (* This must be an exact match even if case-insensitive matching was requested. *)
+          (* This must be an exact match even if case-insensitive matching
+             was requested. *)
           if String.equal value value0 then Some env else None )
 
 let close_dots_or_fail conf ~dots env f =
@@ -281,8 +289,8 @@ let rec match_ (conf : conf) ~(dots : dots option) (env : env)
                   if pat_matches_empty_doc pat1 then
                     match_ conf ~dots:None env last_loc pat2 doc cont
                   else Fail) ) )
-  | Dots (_, opt_mvar) :: pat_tail, doc ->
-      let dots = extend_dots ~dots opt_mvar last_loc in
+  | Dots dots_param :: pat_tail, doc ->
+      let dots = extend_dots ~dots ~dots_param last_loc in
       match_ conf ~dots env last_loc pat_tail doc cont
   | Atom (_, p) :: pat_tail, doc -> (
       match doc with
